@@ -55,13 +55,12 @@ func (e *Epoll) Wait() ([]connection.Connection, error) {
 retry:
 	n, err := syscall.EpollWait(e.epoll, events, msec)
 	if err != nil {
+		// Many system calls will report the EINTR error code if a signal occurred while the system call was in progress.
+		// No error actually occurred.
 		if err == syscall.EINTR {
 			goto retry
 		}
 		return nil, err
-	}
-	if n == 0 {
-		goto retry
 	}
 	e.locker.RLock()
 	defer e.locker.RUnlock()
@@ -75,6 +74,12 @@ retry:
 			continue
 		}
 		if isReadEvent(&events[i]) {
+			socket := int(events[i].Fd)
+			c := e.sockets[socket]
+			connections = append(connections, c)
+			continue
+		}
+		if isWriteEvent(&events[i]) {
 			socket := int(events[i].Fd)
 			c := e.sockets[socket]
 			connections = append(connections, c)
@@ -101,9 +106,13 @@ func (e *Epoll) Close() error {
 }
 
 func isReadEvent(e *syscall.EpollEvent) bool {
-	return 0 != e.Events&(syscall.EPOLLIN)
+	return 0 != (e.Events & (syscall.EPOLLIN))
+}
+
+func isWriteEvent(e *syscall.EpollEvent) bool {
+	return 0 != (e.Events & (syscall.EPOLLOUT))
 }
 
 func isErrorEvent(e *syscall.EpollEvent) bool {
-	return (e.Events&syscall.EPOLLHUP) != 0 || (e.Events&syscall.EPOLLRDHUP) != 0 || (e.Events&syscall.EPOLLERR) != 0
+	return 0 != (e.Events & (syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLERR))
 }
