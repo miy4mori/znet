@@ -37,7 +37,7 @@ func NewEpoll() (*Epoll, error) {
 // Add Socket File Descriptor
 func (e *Epoll) Add(c connection.Connection) error {
 	ee := &syscall.EpollEvent{
-		Events: syscall.EPOLLIN | syscall.EPOLLOUT,
+		Events: syscall.EPOLLIN | syscall.EPOLLOUT | syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP,
 		Fd:     int32(c.Socket()),
 	}
 	if err := syscall.EpollCtl(e.epoll, syscall.EPOLL_CTL_ADD, c.Socket(), ee); err != nil {
@@ -101,9 +101,9 @@ func (e *Epoll) Close() error {
 }
 
 func isReadEvent(e *syscall.EpollEvent) bool {
-	return 0 != e.Events&(syscall.EPOLLIN|syscall.EPOLLPRI|syscall.EPOLLRDHUP)
+	return 0 != e.Events&(syscall.EPOLLIN)
 }
 
 func isErrorEvent(e *syscall.EpollEvent) bool {
-	return ((e.Events & syscall.EPOLLHUP) != 0) && ((e.Events & syscall.EPOLLIN) == 0)
+	return (e.Events&syscall.EPOLLHUP) != 0 || (e.Events&syscall.EPOLLRDHUP) != 0 || (e.Events&syscall.EPOLLERR) != 0
 }
